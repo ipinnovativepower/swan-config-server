@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bootstrap demo</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+      crossorigin="anonymous"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container mt-5">
+      <h1>Swan Manager</h1>
+
+      <ul class="nav nav-tabs" id="navTabs">
+        <li class="nav-item">
+          <a
+            class="nav-link active"
+            aria-current="page"
+            href="#"
+            onclick="showTab('tab1')"
+            >Active</a
+          >
+        </li>
+        <li class="nav-item">
+          <a
+            class="nav-link"
+            href="#"
+            onclick="showTab('tab2'); fetchCommandToSwan();"
+            >Commands</a
+          >
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#" onclick="showTab('tab3')">Sessions</a>
+        </li>
+      </ul>
+
+      <div id="tab1" class="tab-content mt-4">
+        <div id="responseMessage" class="mt-3"></div>
+
+        <div class="row mt-5">
+          <div class="col-md-4">
+            <h2>Swan Devices</h2>
+            <form id="addSwanForm">
+              <div class="mb-3">
+                <label for="imei" class="form-label">IMEI</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="imei"
+                  name="imei"
+                  placeholder="Enter IMEI"
+                />
+              </div>
+              <button type="submit" class="btn btn-primary">Add Swan</button>
+            </form>
+            <table class="table table-striped mt-4">
+              <thead>
+                <tr>
+                  <th>IMEI</th>
+                  <th>Timezone</th>
+                </tr>
+              </thead>
+              <tbody id="swanDevicesTableBody"></tbody>
+            </table>
+          </div>
+          <div class="col-md-4">
+            <h2>Device Info</h2>
+            <div id="deviceInfo">
+              <p>Select a device to see its details.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="tab2" class="tab-content mt-4 hidden">
+        <h2>Commands to Swan</h2>
+        <table class="table table-striped mt-4">
+          <thead>
+            <tr>
+              <th>Command ID</th>
+              <th>Detail</th>
+            </tr>
+          </thead>
+          <tbody id="commandToSwanTableBody"></tbody>
+        </table>
+        <div id="commandInfo" class="hidden">
+          <p>Select a command to see its details.</p>
+        </div>
+      </div>
+
+      <div id="tab3" class="tab-content mt-4 hidden">
+        <div class="row">
+          <div class="col-md-4">
+            <h2>Sessions</h2>
+            <table class="table table-striped mt-4">
+              <thead>
+                <tr>
+                  <th>Session ID</th>
+                  <th>Detail</th>
+                </tr>
+              </thead>
+              <tbody id="sessionsTableBody"></tbody>
+            </table>
+          </div>
+          <div class="col-md-8">
+            <h2>Session Info</h2>
+            <div id="sessionInfo">
+              <p>Select a session to see its details.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+      function showTab(tabId) {
+        // Hide all tab contents
+        const tabContents = document.querySelectorAll(".tab-content");
+        tabContents.forEach((tabContent) => {
+          tabContent.classList.add("hidden");
+        });
+
+        // Remove active class from all tabs
+        const tabs = document.querySelectorAll(".nav-link");
+        tabs.forEach((tab) => {
+          tab.classList.remove("active");
+        });
+
+        // Show the selected tab content
+        document.getElementById(tabId).classList.remove("hidden");
+
+        // Add active class to the selected tab
+        const activeTab = document.querySelector(`a[href="#${tabId}"]`);
+        if (activeTab) {
+          activeTab.classList.add("active");
+        }
+      }
+
+      // Initialize the first tab as active
+      document.addEventListener("DOMContentLoaded", () => {
+        showTab("tab1");
+      });
+
+      document
+        .getElementById("addSwanForm")
+        .addEventListener("submit", function (event) {
+          event.preventDefault();
+          const imei = document.getElementById("imei").value;
+          axios
+            .get(`/add/swan/${imei}`)
+            .then((response) => {
+              document.getElementById("responseMessage").innerText =
+                "Swan device added successfully!";
+              fetchSwanDevices();
+            })
+            .catch((error) => {
+              document.getElementById("responseMessage").innerText =
+                "Error adding Swan device.";
+            });
+        });
+
+      function fetchSwanDevices() {
+        axios
+          .get("/get_swan_devices")
+          .then((response) => {
+            const devices = response.data;
+            const tableBody = document.getElementById("swanDevicesTableBody");
+            tableBody.innerHTML = "";
+            devices.forEach((device) => {
+              const dynamicKey = Object.keys(device)[0]; // Get the dynamic key
+              const deviceData = device[dynamicKey]; // Access the nested dictionary
+              const row = document.createElement("tr");
+              row.addEventListener("click", () => {
+                highlightRow(row);
+                displayDeviceInfo(deviceData);
+              });
+              const imeiCell = document.createElement("td");
+              imeiCell.innerText = dynamicKey; // Display the dynamic key (IMEI)
+              const timezoneCell = document.createElement("td");
+              timezoneCell.innerText = deviceData.timezone; // Display the timezone
+              row.appendChild(imeiCell);
+              row.appendChild(timezoneCell);
+              tableBody.appendChild(row);
+            });
+          })
+          .catch((error) => {
+            console.error("Error fetching Swan devices:", error);
+          });
+      }
+
+      function highlightRow(row) {
+        // Remove highlight from any previously highlighted row
+        const previouslyHighlightedRow = document.querySelector(".highlighted");
+        if (previouslyHighlightedRow) {
+          previouslyHighlightedRow.classList.remove("highlighted");
+        }
+        // Add highlight to the clicked row
+        row.classList.add("highlighted");
+      }
+
+      function displayDeviceInfo(deviceData) {
+        const deviceInfoDiv = document.getElementById("deviceInfo");
+        let formHtml = '<form id="deviceInfoForm">';
+
+        for (const key in deviceData) {
+          if (deviceData.hasOwnProperty(key)) {
+            const value = deviceData[key];
+            const readonly = key === "imei" ? "readonly" : ""; // Make IMEI field readonly
+            formHtml += `
+                <div class="mb-3">
+                    <label for="${key}" class="form-label"><strong>${
+              key.charAt(0).toUpperCase() + key.slice(1)
+            }:</strong></label>
+                    <input type="text" class="form-control" id="${key}" name="${key}" value="${value}" ${readonly}>
+                </div>
+            `;
+          }
+        }
+
+        formHtml += `
+        <button type="button" class="btn btn-primary" onclick="saveDeviceInfo()">Save</button>
+    </form>`;
+
+        deviceInfoDiv.innerHTML = formHtml;
+      }
+
+      function saveDeviceInfo() {
+        const form = document.getElementById("deviceInfoForm");
+        const formData = new FormData(form);
+        const deviceData = {};
+        formData.forEach((value, key) => {
+          deviceData[key] = value;
+        });
+        console.log(JSON.stringify(deviceData));
+        console.log(deviceData.imei);
+        const imei = deviceData.imei;
+        axios
+          .post(`/add/command_to_swan/${imei}`, deviceData)
+          .then((response) => {
+            // Handle the response from the server
+          })
+          .catch((error) => {
+            console.error("Error sending JSON data:", error);
+          });
+
+        // You can now send this JSON object to your server or use it as needed
+      }
+
+      function fetchCommandToSwan() {
+        axios
+          .get("/get_command_to_swan")
+          .then((response) => {
+            const commands = response.data;
+            const tableBody = document.getElementById("commandToSwanTableBody");
+            tableBody.innerHTML = "";
+            commands.forEach((command) => {
+              const dynamicKey = Object.keys(command)[0]; // Get the dynamic key
+              const commandData = command[dynamicKey]; // Access the nested dictionary
+              const row = document.createElement("tr");
+              row.addEventListener("click", () => {
+                highlightRow(row);
+                displayCommandInfo(commandData);
+              });
+              const commandIdCell = document.createElement("td");
+              commandIdCell.innerText = dynamicKey; // Display the dynamic key (Command ID)
+              const commandDetailCell = document.createElement("td");
+              commandDetailCell.innerText = commandData.detail; // Display the command detail
+              row.appendChild(commandIdCell);
+              row.appendChild(commandDetailCell);
+              tableBody.appendChild(row);
+            });
+          })
+          .catch((error) => {
+            console.error("Error fetching commands to Swan:", error);
+          });
+      }
+
+      function displayCommandInfo(commandData) {
+        const commandInfoDiv = document.getElementById("commandInfo");
+        let formHtml = '<form id="commandInfoForm">';
+
+        for (const key in commandData) {
+          if (commandData.hasOwnProperty(key)) {
+            const value = commandData[key];
+            formHtml += `
+                        <div class="mb-3">
+                            <label for="${key}" class="form-label"><strong>${
+              key.charAt(0).toUpperCase() + key.slice(1)
+            }:</strong></label>
+                            <input type="text" class="form-control" id="${key}" name="${key}" value="${value}">
+                        </div>
+                    `;
+          }
+        }
+
+        formHtml += `
+                <button type="button" class="btn btn-primary" onclick="saveCommandInfo()">Save</button>
+            </form>`;
+
+        commandInfoDiv.innerHTML = formHtml;
+      }
+
+      function saveCommandInfo() {
+        const form = document.getElementById("commandInfoForm");
+        const formData = new FormData(form);
+        const commandData = {};
+        formData.forEach((value, key) => {
+          commandData[key] = value;
+        });
+        console.log(JSON.stringify(commandData));
+        // You can now send this JSON object to your server or use it as needed
+      }
+
+      function highlightRow(row) {
+        const rows = row.parentElement.children;
+        for (let i = 0; i < rows.length; i++) {
+          rows[i].classList.remove("table-active");
+        }
+        row.classList.add("table-active");
+      }
+
+      function fetchSessions() {
+        axios
+          .get("/get_sessions")
+          .then((response) => {
+            const sessions = response.data;
+            const tableBody = document.getElementById("sessionsTableBody");
+            tableBody.innerHTML = "";
+            sessions.forEach((session) => {
+              const dynamicKey = Object.keys(session)[0]; // Get the dynamic key
+              const sessionData = session[dynamicKey]; // Access the nested dictionary
+              const row = document.createElement("tr");
+              row.addEventListener("click", () => {
+                highlightRow(row);
+                displaySessionInfo(sessionData);
+              });
+              const sessionIdCell = document.createElement("td");
+              sessionIdCell.innerText = dynamicKey; // Display the dynamic key (Session ID)
+              const sessionDetailCell = document.createElement("td");
+              sessionDetailCell.innerText = sessionData.detail; // Display the session detail
+              row.appendChild(sessionIdCell);
+              row.appendChild(sessionDetailCell);
+              tableBody.appendChild(row);
+            });
+          })
+          .catch((error) => {
+            console.error("Error fetching sessions:", error);
+          });
+      }
+
+      function displaySessionInfo(sessionData) {
+        const sessionInfoDiv = document.getElementById("sessionInfo");
+        let infoHtml = '<div id="sessionInfoDetails">';
+
+        for (const key in sessionData) {
+          if (sessionData.hasOwnProperty(key)) {
+            const value = sessionData[key];
+            infoHtml += `
+                    <div class="mb-3">
+                        <label class="form-label"><strong>${
+                          key.charAt(0).toUpperCase() + key.slice(1)
+                        }:</strong></label>
+                        <p>${value}</p>
+                    </div>
+                `;
+          }
+        }
+
+        infoHtml += "</div>";
+        sessionInfoDiv.innerHTML = infoHtml;
+      }
+
+      function highlightRow(row) {
+        const rows = row.parentElement.children;
+        for (let i = 0; i < rows.length; i++) {
+          rows[i].classList.remove("table-active");
+        }
+        row.classList.add("table-active");
+      }
+
+      // Initialize the sessions table when the page loads
+      document.addEventListener("DOMContentLoaded", () => {
+        fetchSessions();
+      });
+
+      // Fetch Swan devices on page load
+      fetchSwanDevices();
+      fetchCommandToSwan();
+    </script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+      crossorigin="anonymous"
+    ></script>
+  </body>
+</html>
