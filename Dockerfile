@@ -10,17 +10,14 @@ COPY requirements.txt ./
 # Install the Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the application code to the container
+# Copy the entire project directory to the container
 COPY . .
 
-# Copy the gunicorn_config.py file to the container
-COPY gunicorn_config.py .
-
 # Set the environment variable for Flask
-ENV FLASK_APP=main.py
+ENV FLASK_APP=run.py
 
 # Expose the port on which the Flask app will run
 EXPOSE 8000
 
 # Start the Flask app with Gunicorn using the gunicorn_config.py file
-CMD ["gunicorn", "--config", "gunicorn_config.py", "main:app"]
+CMD ["gunicorn", "--config", "gunicorn_config.py", "app:create_app()"]
