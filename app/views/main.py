@@ -13,7 +13,24 @@ import time
 
 from app.config import SWAN_DEFAULT_CONFIG
 from app.utils.db_utils import (
-    db
+    db, 
+    UPLOAD_SERVER, 
+    get_all_items_messages_collection,
+    add_item_message_collection, 
+    set_item_session_collection,
+    update_item_session_collection,
+    delete_item_session_collection,
+    get_item_session_collection,
+    set_item_swan_devices_collection,
+    update_item_swan_devices_collection,
+    delete_item_swan_devices_collection,
+    get_item_swan_devices_collection,
+    set_item_command_to_swan_collection,
+    update_item_command_to_swan_collection,
+    delete_item_command_to_swan_collection,
+    get_item_command_to_swan_collection,
+    update_item_message_collection,
+    set_item_message_collection
 )
 
 main_bp = Blueprint("main", __name__)
@@ -31,26 +48,8 @@ swan_session_steps = {
 
 # Load .env file
 load_dotenv()
-
 UPLOAD_SERVER = os.getenv("UPLOAD_SERVER")
 
-# Determine if the app should connect to the Firestore emulator or production Firestore
-if "FIRESTORE_EMULATOR_HOST" in os.environ:
-    # Using Firestore emulator
-    credentials = google.auth.credentials.AnonymousCredentials()
-    db = firestore.Client(
-        project=os.environ["FIRESTORE_PROJECT_ID"], credentials=credentials
-    )
-    print("Connected to Firestore Emulator.")
-else:
-    # Using Production Firestore
-    dbname = os.environ.get("FIRESTORE_DB_NAME")
-    print(f"DB Name: {dbname}")
-    if dbname:
-        db = firestore.Client(database=dbname)
-    else:
-        db = firestore.Client()
-    print("Connected to Production Firestore.")
 
 
 def json_to_string(json_obj):
@@ -93,30 +92,13 @@ console_handler.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
 logging.getLogger().addHandler(console_handler)
 
 
-@main_bp.route("/", methods=["GET"])
-def hello_world():
-    return "Hello, World!"
-
-
-@main_bp.route("/index", methods=["GET"])
-def index():
-    return render_template("index.html")
-
-
-@main_bp.route("/command", methods=["GET"])
-def command():
-    imei = request.args.get("imei")
-    command = request.args.get("command")
-    command_id = request.args.get("command_id", "0123456789")
-
-    data = {"imei": imei, "command": command, "command_id": command_id}
-
-    db.collection("commands").add(data)
-    return jsonify({"message": "Command added successfully!"}), 201
+def log_request_details(req):
+    logging.info(f"Request method: {req.method}")
+    logging.info(f"Request headers:\n{req.headers}")
 
 
 def fetch_swan_messages():
-    results = db.collection("messages").stream()
+    results = get_all_items_messages_collection()
     data_list = [doc.to_dict() for doc in results]
     return data_list
 
@@ -126,116 +108,139 @@ def handle_post_request(request):
     if content_type == "application/json":
         # Handle JSON data
         data = request.get_json()
-        db.collection("messages").add(data)
+        add_item_message_collection(data)
+        
         return jsonify({"message": "JSON Data added successfully!"}), 201
 
     elif content_type == "text/csv":
         # Handle CSV data
         csv_string = request.data.decode("utf-8")
-        db.collection("messages").add({"csv_data": csv_string})
+        add_item_message_collection({"csv_data": csv_string})
+        
 
         return jsonify({"message": "CSV Data added successfully!"}), 201
 
     else:
         return jsonify({"error": "Unsupported Content-Type"}), 400
 
+def handle_post_csv_type(imei):
+    session_id = f"session_{imei}_{str(uuid.uuid4())[:6]}"
+    session_data = {"session_id": session_id, "status": swan_session_steps["0"]}
+    set_item_session_collection(session_id, session_data)
+    
+    command = {
+        "cmd": {"type": "get_cfg", "id": session_id}
+    }
+
+    update_item_session_collection(session_id, {"status": swan_session_steps["1"]})
+    
+    return jsonify(command), 200
+
+def send_back_to_upload_server(session_id):
+    update_item_session_collection(session_id, {"status": swan_session_steps["5"]})
+    content = {"upload_server": UPLOAD_SERVER}
+    command = {
+        "cmd": {
+            "type": "set_cfg", 
+            "id": session_id,
+            "content": format_configuration_string(content)
+        }
+    }
+    
+    add_item_message_collection({"session_id": session_id, "description": "Sent SET_CFG command", "content": command})
+    return jsonify(command), 200
+
+def send_configuration_to_swan(configuration_elements, session_id, imei):
+    command = {
+        "cmd": {
+            "type": "set_cfg", 
+            "id": session_id,
+            "content": format_configuration_string(configuration_elements)
+        }
+    }
+    
+    update_item_session_collection(session_id, {"status": swan_session_steps["3"]})
+    
+    delete_item_command_to_swan_collection(imei)
+    
+    document_id = f"{session_id}_{int(time.time())}"
+    set_item_message_collection(document_id, {"session_id": document_id, "description": "Sent SET_CFG command", "content": command})
+                        
+    return jsonify(command), 200
+
+
+@main_bp.route("/index", methods=["GET"])
+def index():
+    return render_template("index.html")
+
 
 @main_bp.route("/swan", methods=["GET", "POST"])
 def handle_request():
     if request.method == "GET":
+        # Fetch messages from SWAN and log the GET request
         data_list = fetch_swan_messages()
         logging.info(f"Received GET request: {request.path}")
 
+        # Return the fetched data as JSON with a 200 OK status
         return jsonify(data_list), 200
 
     elif request.method == "POST":
-        # Only logging
+        # Handle the POST request and log it
         resp = handle_post_request(request)
 
-        # Checking if the request is coming from the SWAN device
+        # Extract headers to check if the request is from a SWAN device
         imei = request.headers.get("Wep-Imei")
         content_type = request.headers.get("Content-Type")
 
+        # If IMEI is not present, return the response
         if not imei:
             return resp
 
+        # Handle CSV content type specifically
         if content_type == "text/csv":
-            session_id = f"session_{imei}_{str(uuid.uuid4())[:6]}"
-            session_data = {"session_id": session_id, "status": swan_session_steps["0"]}
-            db.collection("sessions").document(session_id).set(session_data)
-            
-            command = {
-                "cmd": {"type": "get_cfg", "id": session_id}
-            }
-
-            db.collection("sessions").document(session_id).update({"status": swan_session_steps["1"]})
-            
-            return jsonify(command), 200
-
+            handle_post_csv_type(imei)
+        
+        # If content type is not JSON, return the response
         if content_type != "application/json":
             return resp
-            
+        
+        # Parse the JSON data from the request
         data = request.get_json()
         session_id = data['cmd_res']['id']
-        session_doc = db.collection("sessions").document(session_id).get()
+        session_doc = get_item_session_collection(session_id)
 
+        # If session document does not exist, log it and handle appropriately
         if not session_doc.exists:
             # It is odd if it doesn't exist. Log it. Think of how to handle it.
             pass
         
-        
+        # Handle the response code from the SWAN device
         if data['cmd_res']['res_code'] == 0:
             if data['cmd_res']['type'] == "get_cfg":
-                # Check for awaiting updates
-                # If there are updates, send them
-                # If there are no updates, return to Galooli
+                # Decode the base64 content and update the SWAN devices collection
                 content = data['cmd_res']['content']
                 decoded_content = json.loads(base64.b64decode(content).decode("utf-8"))
                 
-                db.collection("swan_devices").document(imei).set(decoded_content)
+                set_item_swan_devices_collection(imei, decoded_content)
                 
+                # Get the command to SWAN collection document
+                doc = get_item_command_to_swan_collection(imei)
                 
-                doc = db.collection("command_to_swan").document(f"update-{imei}").get()
-                
+                # Check the session status
                 session_status = session_doc.to_dict()["status"]
                 if session_status == swan_session_steps["5"]:
                     return jsonify({"message": "Session already completed"}), 200
-
                 
+                # If document exists, send configuration to SWAN
                 if doc.exists:
                     configuration_elements = doc.to_dict()
-                    command = {
-                        "cmd": {
-                            "type": "set_cfg", 
-                            "id": session_id,
-                            # "content": '''{\"device_tag\":\"Changed Tag\", \"collect_mode\":8}'''
-                            "content": format_configuration_string(configuration_elements)
-                        }
-                    }
-                    db.collection("sessions").document(session_id).update({"status": swan_session_steps["3"]})
-                    db.collection("command_to_swan").document(f"update-{imei}").delete()
-                    document_id = f"{session_id}_{int(time.time())}"
-                    db.collection("messages").document(document_id).set({"session_id": document_id, "description": "Sent SET_CFG command", "content": command})
-
-                    return jsonify(command), 200
+                    return send_configuration_to_swan(configuration_elements, session_id, imei)
                 else:
-                    db.collection("sessions").document(session_id).update({"status": swan_session_steps["5"]})
-                    content = {"upload_server": UPLOAD_SERVER}
-                    command = {
-                        "cmd": {
-                            "type": "set_cfg", 
-                            "id": session_id,
-                            "content": format_configuration_string(content)
-                        }
-                    }
+                    # If no updates, send back to upload server
+                    return send_back_to_upload_server(session_id)
                     
-                    db.collection("messages").add({"session_id": session_id, "description": "Sent SET_CFG command", "content": command})
-                    return jsonify(command), 200
-                
-
-                
             if data['cmd_res']['type'] == "set_cfg":
-                # db.collection("sessions").document(session_id).update({"status": swan_session_steps["1"]})
+                # Prepare a command to get configuration and return it
                 command = {
                     "cmd": {
                         "type": "get_cfg", 
@@ -246,20 +251,14 @@ def handle_request():
                 # Return to Galooli
                 
         elif data['cmd_res']['res_code'] == 1:
-            if data['cmd_res']['type'] == "get_cfg":
-                session_doc.update({"status": swan_session_steps["6"]})
-                # Handle error
-                return jsonify({"error": "Error setting configuration"}), 400
-
-            if data['cmd_res']['type'] == "set_cfg":
-                session_doc.update({"status": swan_session_steps["6"]})
-                # Handle error
-                return jsonify({"error": "Error setting configuration"}), 400        
+            # Update session status to indicate an error and return an error response
+            session_doc.update({"status": swan_session_steps["6"]})
+            return jsonify({"error": "Error setting configuration"}), 400
         
         else:
-            # reult doesn't equal 1 or 0 and it is not handled 
+            # Handle unexpected response codes
+            # result doesn't equal 1 or 0 and it is not handled 
             pass
-        
 
 
 # Can be moved to API blueprint
@@ -341,8 +340,3 @@ def delete_command_to_swan(imei):
         return jsonify({"message": "Swan command deleted successfully!"}), 200
     else:
         return jsonify({"error": "Swan command not found!"}), 404
-
-
-def log_request_details(req):
-    logging.info(f"Request method: {req.method}")
-    logging.info(f"Request headers:\n{req.headers}")

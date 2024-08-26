@@ -1418,3 +1418,41 @@
 2024-08-21 13:45:47 - 127.0.0.1 - - [21/Aug/2024 13:45:47] "GET /get_swan_devices HTTP/1.1" 200 -
 2024-08-21 13:45:51 - 127.0.0.1 - - [21/Aug/2024 13:45:51] "GET /delete/swan/123111111111113 HTTP/1.1" 200 -
 2024-08-21 13:45:51 - 127.0.0.1 - - [21/Aug/2024 13:45:51] "GET /get_swan_devices HTTP/1.1" 200 -
+2024-08-26 18:05:44 - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2024-08-26 18:05:44 - [33mPress CTRL+C to quit[0m
+2024-08-26 18:05:44 -  * Restarting with stat
+2024-08-26 18:05:46 -  * Debugger is active!
+2024-08-26 18:05:46 -  * Debugger PIN: 694-152-922
+2024-08-26 18:05:52 - 127.0.0.1 - - [26/Aug/2024 18:05:52] "[33mGET / HTTP/1.1[0m" 404 -
+2024-08-26 18:05:53 - 127.0.0.1 - - [26/Aug/2024 18:05:53] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2024-08-26 18:05:59 - 127.0.0.1 - - [26/Aug/2024 18:05:59] "GET /index HTTP/1.1" 200 -
+2024-08-26 18:06:22 - 127.0.0.1 - - [26/Aug/2024 18:06:22] "GET /index HTTP/1.1" 200 -
+2024-08-26 18:07:12 - 127.0.0.1 - - [26/Aug/2024 18:07:12] "[35m[1mGET /add/swan/867207062537660 HTTP/1.1[0m" 500 -
+2024-08-26 18:07:29 - 127.0.0.1 - - [26/Aug/2024 18:07:29] "[35m[1mGET /add/swan/123111111111111 HTTP/1.1[0m" 500 -
+2024-08-26 18:08:10 - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2024-08-26 18:08:10 - [33mPress CTRL+C to quit[0m
+2024-08-26 18:08:10 -  * Restarting with stat
+2024-08-26 18:08:12 -  * Debugger is active!
+2024-08-26 18:08:12 -  * Debugger PIN: 694-152-922
+2024-08-26 18:08:20 - 127.0.0.1 - - [26/Aug/2024 18:08:20] "GET /index HTTP/1.1" 200 -
+2024-08-26 18:09:16 - 127.0.0.1 - - [26/Aug/2024 18:09:16] "[35m[1mGET /add/swan/867207062537660 HTTP/1.1[0m" 500 -
+2024-08-26 18:09:16 - 127.0.0.1 - - [26/Aug/2024 18:09:16] "GET /index HTTP/1.1" 200 -
+2024-08-26 18:10:06 - 127.0.0.1 - - [26/Aug/2024 18:10:06] "[35m[1mGET /add/swan/867207062537660 HTTP/1.1[0m" 500 -
+2024-08-26 18:10:19 - 127.0.0.1 - - [26/Aug/2024 18:10:19] "[35m[1mGET /add/swan/867207062537660 HTTP/1.1[0m" 500 -
+2024-08-26 18:10:35 - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2024-08-26 18:10:35 - [33mPress CTRL+C to quit[0m
+2024-08-26 18:10:35 -  * Restarting with stat
+2024-08-26 18:10:36 -  * Debugger is active!
+2024-08-26 18:10:36 -  * Debugger PIN: 694-152-922
+2024-08-26 18:10:59 - 127.0.0.1 - - [26/Aug/2024 18:10:59] "[35m[1mGET /add/swan/867207062537660 HTTP/1.1[0m" 201 -
+2024-08-26 18:10:59 - 127.0.0.1 - - [26/Aug/2024 18:10:59] "GET /get_swan_devices HTTP/1.1" 200 -
+2024-08-26 18:11:18 - 127.0.0.1 - - [26/Aug/2024 18:11:18] "[35m[1mPOST /add/command_to_swan/867207062537660 HTTP/1.1[0m" 201 -
+2024-08-26 18:11:20 - 127.0.0.1 - - [26/Aug/2024 18:11:20] "GET /index HTTP/1.1" 200 -
+2024-08-26 18:11:20 - 127.0.0.1 - - [26/Aug/2024 18:11:20] "GET /get_swan_devices HTTP/1.1" 200 -
+2024-08-26 18:11:20 - 127.0.0.1 - - [26/Aug/2024 18:11:20] "GET /get_command_to_swan HTTP/1.1" 200 -
+2024-08-26 18:11:20 - Received GET request: /swan
+2024-08-26 18:11:20 - 127.0.0.1 - - [26/Aug/2024 18:11:20] "GET /get_sessions HTTP/1.1" 200 -
+2024-08-26 18:11:20 - 127.0.0.1 - - [26/Aug/2024 18:11:20] "GET /swan HTTP/1.1" 200 -
