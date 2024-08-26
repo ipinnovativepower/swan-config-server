@@ -1,23 +1,38 @@
-from flask import Flask, request, jsonify, Response, Blueprint, flash
+from flask import request, jsonify, Blueprint
 from flask import render_template
 import logging
-import requests
 import google.cloud.firestore
 from google.cloud import firestore
 import os
+import uuid
+import json
+import base64
 
-from utils import redirect_to_API_HOST
-from swan_commands import SET_CFG
-from app.forms import ImeiForm
 from dotenv import load_dotenv
+import time
 
+from app.config import SWAN_DEFAULT_CONFIG
+from app.utils.db_utils import (
+    db
+)
 
 main_bp = Blueprint("main", __name__)
+
+swan_session_steps = {
+    "0": "created",
+    "1": "sent get_cfg",
+    "2": "received get_cfg",
+    "3": "sent set_cfg",
+    "4": "received set_cfg",
+    "5": "returned to Galooli",
+    "6": "error"
+}
 
 
 # Load .env file
 load_dotenv()
 
+UPLOAD_SERVER = os.getenv("UPLOAD_SERVER")
 
 # Determine if the app should connect to the Firestore emulator or production Firestore
 if "FIRESTORE_EMULATOR_HOST" in os.environ:
@@ -30,11 +45,35 @@ if "FIRESTORE_EMULATOR_HOST" in os.environ:
 else:
     # Using Production Firestore
     dbname = os.environ.get("FIRESTORE_DB_NAME")
+    print(f"DB Name: {dbname}")
     if dbname:
         db = firestore.Client(database=dbname)
     else:
         db = firestore.Client()
     print("Connected to Production Firestore.")
+
+
+def json_to_string(json_obj):
+    # Convert the JSON object to a string
+    json_str = json.dumps(json_obj)
+    
+    # Escape the double quotes in the string
+    formatted_str = json_str.replace('"', r'\"')
+    
+    # Add the outer double quotes
+    formatted_str = f'"{formatted_str}"'
+    
+    return formatted_str
+
+def format_configuration_string(dict):
+    format_configuration_string = ""
+    for key, value in dict.items():
+        if type(value) == str:
+            format_configuration_string += f"\"{key}\":\"{value}\","
+        else:
+            format_configuration_string += f"\"{key}\":{value}"
+        
+    return (f"\u007b{format_configuration_string[:-1]}\u007d")
 
 
 # Configure logging to file
@@ -76,49 +115,10 @@ def command():
     return jsonify({"message": "Command added successfully!"}), 201
 
 
-@main_bp.route("/swan", methods=["GET", "POST"])
-def handle_request():
-    if request.method == "GET":
-        results = db.collection("messages").stream()
-        data_list = [doc.to_dict() for doc in results]
-
-        logging.info(f"Received GET request: {request.path}")
-        # log_request_details(request)
-        return jsonify(data_list), 200
-
-    elif request.method == "POST":
-        # Only logging
-        resp = handle_post_request(request)
-
-        # Checking if the request is coming from the SWAN device
-        imei = request.headers.get("Wep-Imei")
-        content_type = request.headers.get("Content-Type")
-
-        if imei:       
-            
-            results = db.collection("commands").stream()
-
-            for doc in results:
-                doc_data = doc.to_dict()
-                if doc_data["imei"] == imei:
-                    if doc_data["command"] == "set_cfg":
-                        command = {
-                            "cmd": {
-                                "type": "set_cfg",
-                                "id": "0123456789",
-                                "content": '{"device_tag":"Changed Tag", "collect_mode":8}',
-                            }
-                        }
-                    else:
-                        command = {
-                            "cmd": {"type": "get_cfg", "id": doc_data["command_id"]}
-                        }
-
-                    db.collection("commands").document(doc.id).delete()
-                    return jsonify(command), 200
-
-        return resp
-
+def fetch_swan_messages():
+    results = db.collection("messages").stream()
+    data_list = [doc.to_dict() for doc in results]
+    return data_list
 
 def handle_post_request(request):
     content_type = request.headers.get("Content-Type")
@@ -138,6 +138,128 @@ def handle_post_request(request):
 
     else:
         return jsonify({"error": "Unsupported Content-Type"}), 400
+
+
+@main_bp.route("/swan", methods=["GET", "POST"])
+def handle_request():
+    if request.method == "GET":
+        data_list = fetch_swan_messages()
+        logging.info(f"Received GET request: {request.path}")
+
+        return jsonify(data_list), 200
+
+    elif request.method == "POST":
+        # Only logging
+        resp = handle_post_request(request)
+
+        # Checking if the request is coming from the SWAN device
+        imei = request.headers.get("Wep-Imei")
+        content_type = request.headers.get("Content-Type")
+
+        if not imei:
+            return resp
+
+        if content_type == "text/csv":
+            session_id = f"session_{imei}_{str(uuid.uuid4())[:6]}"
+            session_data = {"session_id": session_id, "status": swan_session_steps["0"]}
+            db.collection("sessions").document(session_id).set(session_data)
+            
+            command = {
+                "cmd": {"type": "get_cfg", "id": session_id}
+            }
+
+            db.collection("sessions").document(session_id).update({"status": swan_session_steps["1"]})
+            
+            return jsonify(command), 200
+
+        if content_type != "application/json":
+            return resp
+            
+        data = request.get_json()
+        session_id = data['cmd_res']['id']
+        session_doc = db.collection("sessions").document(session_id).get()
+
+        if not session_doc.exists:
+            # It is odd if it doesn't exist. Log it. Think of how to handle it.
+            pass
+        
+        
+        if data['cmd_res']['res_code'] == 0:
+            if data['cmd_res']['type'] == "get_cfg":
+                # Check for awaiting updates
+                # If there are updates, send them
+                # If there are no updates, return to Galooli
+                content = data['cmd_res']['content']
+                decoded_content = json.loads(base64.b64decode(content).decode("utf-8"))
+                
+                db.collection("swan_devices").document(imei).set(decoded_content)
+                
+                
+                doc = db.collection("command_to_swan").document(f"update-{imei}").get()
+                
+                session_status = session_doc.to_dict()["status"]
+                if session_status == swan_session_steps["5"]:
+                    return jsonify({"message": "Session already completed"}), 200
+
+                
+                if doc.exists:
+                    configuration_elements = doc.to_dict()
+                    command = {
+                        "cmd": {
+                            "type": "set_cfg", 
+                            "id": session_id,
+                            # "content": '''{\"device_tag\":\"Changed Tag\", \"collect_mode\":8}'''
+                            "content": format_configuration_string(configuration_elements)
+                        }
+                    }
+                    db.collection("sessions").document(session_id).update({"status": swan_session_steps["3"]})
+                    db.collection("command_to_swan").document(f"update-{imei}").delete()
+                    document_id = f"{session_id}_{int(time.time())}"
+                    db.collection("messages").document(document_id).set({"session_id": document_id, "description": "Sent SET_CFG command", "content": command})
+
+                    return jsonify(command), 200
+                else:
+                    db.collection("sessions").document(session_id).update({"status": swan_session_steps["5"]})
+                    content = {"upload_server": UPLOAD_SERVER}
+                    command = {
+                        "cmd": {
+                            "type": "set_cfg", 
+                            "id": session_id,
+                            "content": format_configuration_string(content)
+                        }
+                    }
+                    
+                    db.collection("messages").add({"session_id": session_id, "description": "Sent SET_CFG command", "content": command})
+                    return jsonify(command), 200
+                
+
+                
+            if data['cmd_res']['type'] == "set_cfg":
+                # db.collection("sessions").document(session_id).update({"status": swan_session_steps["1"]})
+                command = {
+                    "cmd": {
+                        "type": "get_cfg", 
+                        "id": session_id
+                    }
+                }
+                return jsonify(command), 200
+                # Return to Galooli
+                
+        elif data['cmd_res']['res_code'] == 1:
+            if data['cmd_res']['type'] == "get_cfg":
+                session_doc.update({"status": swan_session_steps["6"]})
+                # Handle error
+                return jsonify({"error": "Error setting configuration"}), 400
+
+            if data['cmd_res']['type'] == "set_cfg":
+                session_doc.update({"status": swan_session_steps["6"]})
+                # Handle error
+                return jsonify({"error": "Error setting configuration"}), 400        
+        
+        else:
+            # reult doesn't equal 1 or 0 and it is not handled 
+            pass
+        
 
 
 # Can be moved to API blueprint
@@ -174,100 +296,7 @@ def get_sessions():
 
 @main_bp.route("/add/swan/<imei>", methods=["GET"])
 def add_swan(imei):
-    data = {
-        "imei": imei,
-        "device_tag": "",
-        "nb1_plmn": "",
-        "nb1_bands": "3,8,20",
-        "nb1_apn": "",
-        "nb1_psm": 0,
-        "nb1_psm_activetime": 0,
-        "nb1_psm_tau": 0,
-        "nb1_rai": 3,
-        "nb1_apn_account_index": 0,
-        "ntp_server": "0.europe.pool.ntp.org",
-        "ntp_port": 123,
-        "ntp_auto_sync": 0,
-        "timezone": 4,
-        "daylightsaving_enable": 1,
-        "upload_server": "weptech-iot.de/swan2",
-        "upload_remote_port": 31031,
-        "upload_local_port": 28028,
-        "upload_proto": 3,
-        "upload_method": 1,
-        "upload_account_index": 0,
-        "upload_format": 2,
-        "upload_format_spec_1": 0xFFFFFFFF,
-        "upload_format_spec_2": 0xFFFFFFFF,
-        "upload_format_spec_3": 0xFFFFFFFF,
-        "upload_retries": 2,
-        "upload_months": 4095,
-        "upload_days": 16385,
-        "upload_weeks": 0,
-        "upload_week_days": 0,
-        "upload_start_hour": 0,
-        "upload_start_minute": 0,
-        "upload_hours": 0,
-        "upload_per_hour": 1,
-        "upload_jitter": 0,
-        "lwm2m_idle_time": 120,
-        "lwm2m_notify_with_ack": 1,
-        "lwm2m_notify_retry_cnt": 2,
-        "lwm2m_notify_timeout": 7,
-        "lwm2m_lifetime": 150,
-        "collect_mode": 8,
-        "collect_rssi_min": -108,
-        "collect_rssi_max": 127,
-        "collect_use_dll": 0,
-        "collect_max_num_meters": 5,
-        "collect_duration": 300,
-        "collect_flags": 0,
-        "collect_datalog_flags": 3,
-        "collect_months": 4095,
-        "collect_days": 16385,
-        "collect_weeks": 0,
-        "collect_week_days": 0,
-        "collect_start_hour": 0,
-        "collect_start_minute": 0,
-        "collect_hours": 0,
-        "collect_per_hour": 1,
-        "collect_jitter": 0,
-        "upload_after_collect": 0,
-        "collect_mode_2": 0,
-        "collect_rssi_min_2": -108,
-        "collect_rssi_max_2": 127,
-        "collect_use_dll_2": 0,
-        "collect_max_num_meters_2": 5,
-        "collect_duration_2": 300,
-        "collect_flags_2": 0,
-        "collect_datalog_flags_2": 3,
-        "collect_months_2": 0,
-        "collect_days_2": 0,
-        "collect_weeks_2": 0,
-        "collect_week_days_2": 0,
-        "collect_start_hour_2": 0,
-        "collect_start_minute_2": 0,
-        "collect_hours_2": 0,
-        "collect_per_hour_2": 1,
-        "collect_jitter_2": 0,
-        "upload_after_collect_2": 0,
-        "quietmode": 0,
-        "nfc_fast_install": 1,
-        "uart_sci": 0,
-        "ci_field_blacklist": 0,
-        "autostart": 0,
-        "clear_status_after_ul": 1,
-        "prefilter_devicetype": "",
-        "prefilter_manufacturer": "",
-        "sync_rx": 1,
-        "sync_rx_duration": 2000,
-        "sync_rx_interval": 300,
-        "sync_rx_storage": 3600,
-        "sync_rx_max_time_gap": 3600,
-        "sync_rx_meter": "12345678-WEP-02-02",
-        "upload_alarm_mask": 0,
-        "upload_alarm_interval": 80,
-    }
+    data = SWAN_DEFAULT_CONFIG
 
     db.collection("swan_devices").document(imei).set(data)
     return jsonify({"message": "Swan device added successfully!"}), 201
@@ -279,14 +308,14 @@ def update_swan(imei):
     doc_ref = db.collection("command_to_swan").document(f"update-{imei}")
 
     if doc_ref.get().exists:
-        doc_ref.update(data)
+        doc_ref.set(data)
         return jsonify({"message": "Swan device updated successfully!"}), 200
     else:
         doc_ref.set(data)
         return jsonify({"message": "Swan device created successfully!"}), 201
 
 
-@main_bp.route("/delete/swan/<imei>", methods=["DELETE"])
+@main_bp.route("/delete/swan/<imei>", methods=["GET", "DELETE"])
 def delete_swan(imei):
     # Reference to the document with the given IMEI
     doc_ref = db.collection("swan_devices").document(imei)

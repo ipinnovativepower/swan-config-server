@@ -4,3 +4,4 @@ requests==2.32.3
 flask-wtf==1.2.1
 
 google-cloud-firestore
+python-dotenv

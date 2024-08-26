@@ -1,7 +1,9 @@
 import pytest
 from flask import Flask
 from dotenv import load_dotenv
+from unittest.mock import patch, MagicMock
 import os
+
 load_dotenv()
 
 from app import create_app  # Adjust the import based on your app structure
@@ -15,9 +17,10 @@ def client():
             # Initialize your database or other setup here if needed
             yield client
 
-def test_update_swan(client):
+@patch('app.views.main.db')
+def test_update_swan(mock_db, client):
     imei = "123111111113"
-    url = f"/update/swan/{imei}"
+    url = f"/add/command_to_swan/{imei}"
     payload = {
         "autostart": 0,
         "ci_field_blacklist": 0,
@@ -113,8 +116,14 @@ def test_update_swan(client):
         "upload_weeks": 0
     }
 
+    # Mock the Firestore document set method
+    mock_document = MagicMock()
+    mock_db.collection.return_value.document.return_value = mock_document
+
     response = client.post(url, json=payload)
-    assert response.status_code == 201
-    assert response.get_json() == {'message': 'Swan device created successfully!'}
-    
-    
+    print(response.data)  # Debugging statement to check response data
+    assert response.status_code == 200
+    assert response.get_json() == {'message': 'Swan device updated successfully!'}
+
+    # Verify that the document set method was called with the correct arguments
+    mock_document.set.assert_called_with(payload)

@@ -13,12 +13,13 @@
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style>
       .hidden {
-        display: none;
+        visibility: hidden;
+        position: absolute;
       }
     </style>
   </head>
   <body>
-    <div class="container mt-5">
+    <div class="container mt-5" >
       <h1>Swan Manager</h1>
 
       <ul class="nav nav-tabs" id="navTabs">
@@ -32,22 +33,18 @@
           >
         </li>
         <li class="nav-item">
-          <a
-            class="nav-link"
-            href="#"
-            onclick="showTab('tab2'); fetchCommandToSwan();"
-            >Commands</a
-          >
+          <a class="nav-link" href="#" onclick="showTab('tab2');">Commands</a>
         </li>
         <li class="nav-item">
           <a class="nav-link" href="#" onclick="showTab('tab3')">Sessions</a>
         </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#" onclick="showTab('tab4')">Messages</a>
+        </li>
       </ul>
 
       <div id="tab1" class="tab-content mt-4">
-        <div id="responseMessage" class="mt-3"></div>
-
-        <div class="row mt-5">
+        <div class="row">
           <div class="col-md-4">
             <h2>Swan Devices</h2>
             <form id="addSwanForm">
@@ -63,7 +60,11 @@
               </div>
               <button type="submit" class="btn btn-primary">Add Swan</button>
             </form>
-            <table class="table table-striped mt-4">
+            <div id="responseMessage" class="mt-3"></div>
+
+            <table
+              class="table table-striped mt-4"
+            >
               <thead>
                 <tr>
                   <th>IMEI</th>
@@ -73,7 +74,7 @@
               <tbody id="swanDevicesTableBody"></tbody>
             </table>
           </div>
-          <div class="col-md-4">
+          <div class="col-md-8">
             <h2>Device Info</h2>
             <div id="deviceInfo">
               <p>Select a device to see its details.</p>
@@ -83,18 +84,28 @@
       </div>
 
       <div id="tab2" class="tab-content mt-4 hidden">
-        <h2>Commands to Swan</h2>
-        <table class="table table-striped mt-4">
-          <thead>
-            <tr>
-              <th>Command ID</th>
-              <th>Detail</th>
-            </tr>
-          </thead>
-          <tbody id="commandToSwanTableBody"></tbody>
-        </table>
-        <div id="commandInfo" class="hidden">
-          <p>Select a command to see its details.</p>
+        <div class="row">
+          <div class="col-md-4">
+            <h2>Commands to Swan</h2>
+            <table
+              class="table table-striped mt-4"
+              style="max-height: 400px; overflow-y: auto"
+            >
+              <thead>
+                <tr>
+                  <th>Command ID</th>
+                  <th>Detail</th>
+                </tr>
+              </thead>
+              <tbody id="commandToSwanTableBody"></tbody>
+            </table>
+          </div>
+          <div class="col-md-8">
+            <h2>Command Info</h2>
+            <div id="commandInfo">
+              <p>Select a command to see its details.</p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -102,7 +113,10 @@
         <div class="row">
           <div class="col-md-4">
             <h2>Sessions</h2>
-            <table class="table table-striped mt-4">
+            <table
+              class="table table-striped mt-4"
+              style="max-height: 400px; overflow-y: auto"
+            >
               <thead>
                 <tr>
                   <th>Session ID</th>
@@ -120,8 +134,139 @@
           </div>
         </div>
       </div>
+
+      <div id="tab4" class="tab-content mt-4 hidden">
+        <div class="row">
+          <div class="col-md-4">
+            <h2>Messages</h2>
+            <table
+              class="table table-striped mt-4"
+              style="max-height: 400px; overflow-y: auto"
+            >
+              <thead>
+                <tr>
+                  <th>Message ID</th>
+                  <th>Detail</th>
+                </tr>
+              </thead>
+                <tbody id="messagesTableBody" style="max-height: 400px; overflow-y: auto;"></tbody>
+            </table>
+          </div>
+          <div class="col-md-8">
+            <h2>Message Info</h2>
+            <div id="messageInfo">
+              <p>Select a message to see its details.</p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     <script>
+      // Shared variables
+      let data_types = {
+        device_tag: "string",
+        nb1_plmn: "string",
+        nb1_bands: "string",
+        nb1_apn: "string",
+        nb1_psm: "integer",
+        nb1_psm_activetime: "integer",
+        nb1_psm_tau: "integer",
+        nb1_rai: "integer",
+        nb1_apn_account_index: "integer",
+        ntp_server: "string",
+        ntp_port: "integer",
+        ntp_auto_sync: "integer",
+        timezone: "integer",
+        daylightsaving_enable: "integer",
+        upload_server: "string",
+        upload_remote_port: "integer",
+        upload_local_port: "integer",
+        upload_proto: "integer",
+        upload_method: "integer",
+        upload_account_index: "integer",
+        upload_format: "integer",
+        upload_format_spec_1: "hexadecimal",
+        upload_format_spec_2: "hexadecimal",
+        upload_format_spec_3: "hexadecimal",
+        upload_retries: "integer",
+        upload_months: "integer",
+        upload_days: "integer",
+        upload_weeks: "integer",
+        upload_week_days: "integer",
+        upload_start_hour: "integer",
+        upload_start_minute: "integer",
+        upload_hours: "integer",
+        upload_per_hour: "integer",
+        upload_jitter: "integer",
+        lwm2m_idle_time: "integer",
+        lwm2m_notify_with_ack: "integer",
+        lwm2m_notify_retry_cnt: "integer",
+        lwm2m_notify_timeout: "integer",
+        lwm2m_lifetime: "integer",
+        collect_mode: "integer",
+        collect_rssi_min: "integer",
+        collect_rssi_max: "integer",
+        collect_use_dll: "integer",
+        collect_max_num_meters: "integer",
+        collect_duration: "integer",
+        collect_flags: "integer",
+        collect_datalog_flags: "integer",
+        collect_months: "integer",
+        collect_days: "integer",
+        collect_weeks: "integer",
+        collect_week_days: "integer",
+        collect_start_hour: "integer",
+        collect_start_minute: "integer",
+        collect_hours: "integer",
+        collect_per_hour: "integer",
+        collect_jitter: "integer",
+        upload_after_collect: "integer",
+        collect_tele_age: "integer",
+        collect_tele_age_2: "integer",
+        collect_mode_2: "integer",
+        collect_rssi_min_2: "integer",
+        collect_rssi_max_2: "integer",
+        collect_use_dll_2: "integer",
+        collect_max_num_meters_2: "integer",
+        collect_duration_2: "integer",
+        collect_flags_2: "integer",
+        collect_datalog_flags_2: "integer",
+        collect_months_2: "integer",
+        collect_days_2: "integer",
+        collect_weeks_2: "integer",
+        collect_week_days_2: "integer",
+        collect_start_hour_2: "integer",
+        collect_start_minute_2: "integer",
+        collect_hours_2: "integer",
+        collect_per_hour_2: "integer",
+        collect_jitter_2: "integer",
+        upload_after_collect_2: "integer",
+        quietmode: "integer",
+        nfc_fast_install: "integer",
+        uart_sci: "integer",
+        ci_field_blacklist: "integer",
+        autostart: "integer",
+        clear_status_after_ul: "integer",
+        prefilter_devicetype: "string",
+        prefilter_manufacturer: "string",
+        sync_rx: "integer",
+        sync_rx_duration: "integer",
+        sync_rx_interval: "integer",
+        sync_rx_storage: "integer",
+        sync_rx_max_time_gap: "integer",
+        sync_rx_meter: "string",
+        sync_rx_flags: "integer",
+        sync_rx_offset: "integer",
+        sync_rx_rssi_min: "integer",
+        upload_alarm_mask: "integer",
+        upload_alarm_interval: "integer",
+      };
+
+      let _devices = [];
+      let _commands = [];
+      let _selectedImei = null;
+      let _originalDeviceData = null;
+
       function showTab(tabId) {
         // Hide all tab contents
         const tabContents = document.querySelectorAll(".tab-content");
@@ -173,6 +318,7 @@
           .get("/get_swan_devices")
           .then((response) => {
             const devices = response.data;
+            _devices = devices;
             const tableBody = document.getElementById("swanDevicesTableBody");
             tableBody.innerHTML = "";
             devices.forEach((device) => {
@@ -181,7 +327,7 @@
               const row = document.createElement("tr");
               row.addEventListener("click", () => {
                 highlightRow(row);
-                displayDeviceInfo(deviceData);
+                displayDeviceInfo(device);
               });
               const imeiCell = document.createElement("td");
               imeiCell.innerText = dynamicKey; // Display the dynamic key (IMEI)
@@ -207,20 +353,42 @@
         row.classList.add("highlighted");
       }
 
-      function displayDeviceInfo(deviceData) {
+      function displayDeviceInfo(device) {
+        const dynamicKey = Object.keys(device)[0]; // Get the dynamic key
+        _selectedImei = dynamicKey;
+
+        const deviceData = device[dynamicKey]; // Access the nested dictionary
+
         const deviceInfoDiv = document.getElementById("deviceInfo");
-        let formHtml = '<form id="deviceInfoForm">';
+        let formHtml = `<button type="button" class="btn btn-danger" onclick="deleteSwanDevice()">Delete</button>`
+
+        formHtml += `<form id="deviceInfoForm" style="overflow-y: scroll; max-height: 65vh;">`;
+
+        _originalDeviceData = deviceData;
 
         for (const key in deviceData) {
           if (deviceData.hasOwnProperty(key)) {
             const value = deviceData[key];
-            const readonly = key === "imei" ? "readonly" : ""; // Make IMEI field readonly
+            readOnlyKeys = [
+              "imei",
+              "upload_server",
+              "upload_remote_port",
+              "upload_method",
+              "utp_server",
+              "utp_port",
+              "upload_format_spec_1",
+              "upload_format_spec_2",
+              "upload_format_spec_3"
+            ];
+            const readonly = readOnlyKeys.includes(key.toLowerCase())
+              ? "readonly"
+              : ""; // Make IMEI field readonly
             formHtml += `
                 <div class="mb-3">
-                    <label for="${key}" class="form-label"><strong>${
-              key.charAt(0).toUpperCase() + key.slice(1)
-            }:</strong></label>
-                    <input type="text" class="form-control" id="${key}" name="${key}" value="${value}" ${readonly}>
+                    <label for="${key}" class="form-label"><strong>${key}:</strong></label>
+                    <input type="${
+                      typeof value === "number" ? "number" : "text"
+                    }" class="form-control" id="${key}" name="${key}" value="${value}" ${readonly}>
                 </div>
             `;
           }
@@ -229,8 +397,26 @@
         formHtml += `
         <button type="button" class="btn btn-primary" onclick="saveDeviceInfo()">Save</button>
     </form>`;
-
         deviceInfoDiv.innerHTML = formHtml;
+      }
+
+      function deleteSwanDevice() {
+        const imei = _selectedImei;
+        // Show confirmation popup
+        if (confirm("Are you sure you want to delete this Swan device?")) {
+          axios
+        .get(`/delete/swan/${imei}`)
+        .then((response) => {
+          // Handle the response from the server
+          fetchSwanDevices();
+        })
+        .catch((error) => {
+          console.error("Error deleting Swan device:", error);
+        });
+
+          const deviceInfoDiv = document.getElementById("deviceInfo");
+          deviceInfoDiv.innerHTML = '<p>Select a device to see its details.</p>';
+        }
       }
 
       function saveDeviceInfo() {
@@ -238,11 +424,23 @@
         const formData = new FormData(form);
         const deviceData = {};
         formData.forEach((value, key) => {
-          deviceData[key] = value;
+          // Check if the value is an integer
+          if (data_types[key] === "integer") {
+            value = parseInt(value);
+          } else if (data_types[key] === "hexadecimal") {
+            value = parseInt(value, 16);
+          } else {
+            value = String(value);
+          }
+
+          console.log(_originalDeviceData[key], value);
+          if (_originalDeviceData[key] !== value && !key.startsWith("upload_format_spec_")) {
+            deviceData[key] = value;
+          }
         });
         console.log(JSON.stringify(deviceData));
-        console.log(deviceData.imei);
-        const imei = deviceData.imei;
+        console.log(_selectedImei);
+        const imei = _selectedImei;
         axios
           .post(`/add/command_to_swan/${imei}`, deviceData)
           .then((response) => {
@@ -260,6 +458,7 @@
           .get("/get_command_to_swan")
           .then((response) => {
             const commands = response.data;
+            _commands = commands;
             const tableBody = document.getElementById("commandToSwanTableBody");
             tableBody.innerHTML = "";
             commands.forEach((command) => {
@@ -268,7 +467,7 @@
               const row = document.createElement("tr");
               row.addEventListener("click", () => {
                 highlightRow(row);
-                displayCommandInfo(commandData);
+                displayCommandInfo(command);
               });
               const commandIdCell = document.createElement("td");
               commandIdCell.innerText = dynamicKey; // Display the dynamic key (Command ID)
@@ -284,28 +483,52 @@
           });
       }
 
-      function displayCommandInfo(commandData) {
+      function displayCommandInfo(command) {
+        const dynamicKey = Object.keys(command)[0]; // Get the dynamic key
+        const commandData = command[dynamicKey]; // Access the nested dictionary
+
         const commandInfoDiv = document.getElementById("commandInfo");
         let formHtml = '<form id="commandInfoForm">';
+
+        // Find the current device configuration using the IMEI value
+        const imei = dynamicKey.substring(7);
+        const currentDevice = _devices.find(
+          (device) => Object.keys(device)[0] === imei
+        );
+
+        const currentDeviceData = currentDevice[Object.keys(currentDevice)[0]];
+        console.log(imei);
+        console.log(currentDeviceData);
 
         for (const key in commandData) {
           if (commandData.hasOwnProperty(key)) {
             const value = commandData[key];
+            console.log(value);
+            const currentValue = currentDeviceData
+              ? currentDeviceData[key]
+              : null;
+            console.log(currentValue);
+            const isUpdated =
+              String(currentValue).trim().toLowerCase() !==
+              String(value).trim().toLowerCase();
+            console.log(isUpdated);
+
             formHtml += `
-                        <div class="mb-3">
-                            <label for="${key}" class="form-label"><strong>${
+              <div class="mb-3">
+                <label for="${key}" class="form-label"><strong>${
               key.charAt(0).toUpperCase() + key.slice(1)
             }:</strong></label>
-                            <input type="text" class="form-control" id="${key}" name="${key}" value="${value}">
-                        </div>
-                    `;
+                <p class="form-control-plaintext" id="${key}" name="${key}" style="color: ${
+              isUpdated ? "red" : "black"
+            };">
+                  ${value}${isUpdated ? ` (Current: ${currentValue})` : ""}
+                </p>
+              </div>
+            `;
           }
         }
 
-        formHtml += `
-                <button type="button" class="btn btn-primary" onclick="saveCommandInfo()">Save</button>
-            </form>`;
-
+        formHtml += `</form>`;
         commandInfoDiv.innerHTML = formHtml;
       }
 
@@ -387,14 +610,62 @@
         row.classList.add("table-active");
       }
 
+      function fetchMessages() {
+        fetch("/swan")
+          .then((response) => response.json())
+          .then((data) => {
+            populateMessagesTable(data);
+          })
+          .catch((error) => console.error("Error fetching messages:", error));
+      }
+
+      function populateMessagesTable(messages) {
+        const messagesTableBody = document.getElementById("messagesTableBody");
+        messagesTableBody.innerHTML = "";
+
+        messages.forEach((message) => {
+          const row = document.createElement("tr");
+          const primaryKey = Object.keys(message)[0];
+          messageData = message[primaryKey];
+          row.innerHTML = `
+        <td>${messageData.id}</td>
+        <td>${messageData.detail}</td>
+      `;
+          row.addEventListener("click", () => displayMessageInfo(message));
+          messagesTableBody.appendChild(row);
+        });
+      }
+
+      function displayMessageInfo(message) {
+        const messageInfoDiv = document.getElementById("messageInfo");
+        let infoHtml = '<form id="messageInfoForm">';
+
+        for (const key in message) {
+          if (message.hasOwnProperty(key)) {
+            const value = message[key];
+            infoHtml += `
+          <div class="mb-3">
+            <label for="${key}" class="form-label"><strong>${key}:</strong></label>
+            <p class="form-control-plaintext" id="${key}" name="${key}">${JSON.stringify(
+              value
+            )}</p>
+          </div>
+        `;
+          }
+        }
+
+        infoHtml += `</form>`;
+        messageInfoDiv.innerHTML = infoHtml;
+      }
+
       // Initialize the sessions table when the page loads
       document.addEventListener("DOMContentLoaded", () => {
+        // Fetch Swan devices on page load
+        fetchSwanDevices();
+        fetchCommandToSwan();
+        fetchMessages();
         fetchSessions();
       });
-
-      // Fetch Swan devices on page load
-      fetchSwanDevices();
-      fetchCommandToSwan();
     </script>
     <script
       src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
