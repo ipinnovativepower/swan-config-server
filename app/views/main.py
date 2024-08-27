@@ -294,7 +294,7 @@ def handle_request():
 
         # Handle CSV content type specifically
         if content_type == "text/csv":
-            handle_post_csv_type(imei)
+            return handle_post_csv_type(imei)
         
         # If content type is not JSON, return the response
         if content_type != "application/json":
