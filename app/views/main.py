@@ -98,32 +98,68 @@ def log_request_details(req):
 
 
 def fetch_swan_messages():
+    """
+    Fetch all messages from the 'messages' collection.
+
+    Retrieves all documents in the 'messages' collection, converts them to 
+    dictionaries, and returns them as a list.
+
+    Returns:
+        list: A list of dictionaries, where each dictionary represents a document 
+        from the 'messages' collection.
+    """
     results = get_all_items_messages_collection()
     data_list = [doc.to_dict() for doc in results]
     return data_list
 
+
 def handle_post_request(request):
+    """
+    Handle POST requests with JSON or CSV content.
+
+    Processes incoming POST requests based on the 'Content-Type' header. 
+    Supports both 'application/json' and 'text/csv'. Adds the received data 
+    to the 'messages' collection.
+
+    Args:
+        request (flask.Request): The incoming request object.
+
+    Returns:
+        flask.Response: A JSON response indicating success or failure of 
+        the operation, along with the appropriate HTTP status code.
+    """
     content_type = request.headers.get("Content-Type")
 
     if content_type == "application/json":
         # Handle JSON data
         data = request.get_json()
         add_item_message_collection(data)
-        
         return jsonify({"message": "JSON Data added successfully!"}), 201
 
     elif content_type == "text/csv":
         # Handle CSV data
         csv_string = request.data.decode("utf-8")
         add_item_message_collection({"csv_data": csv_string})
-        
-
         return jsonify({"message": "CSV Data added successfully!"}), 201
 
     else:
         return jsonify({"error": "Unsupported Content-Type"}), 400
 
+
 def handle_post_csv_type(imei):
+    """
+    Handle POST requests with CSV content from SWAN devices.
+
+    Creates a new session for the SWAN device identified by the given IMEI,
+    sets the initial status, and returns a command to retrieve configuration.
+
+    Args:
+        imei (str): The IMEI identifier for the SWAN device.
+
+    Returns:
+        flask.Response: A JSON response containing the command to retrieve 
+        configuration, along with a 200 HTTP status code.
+    """
     session_id = f"session_{imei}_{str(uuid.uuid4())[:6]}"
     session_data = {"session_id": session_id, "status": swan_session_steps["0"]}
     set_item_session_collection(session_id, session_data)
@@ -136,7 +172,21 @@ def handle_post_csv_type(imei):
     
     return jsonify(command), 200
 
+
 def send_back_to_upload_server(session_id):
+    """
+    Send a configuration command back to the upload server.
+
+    Updates the session status to indicate the session is complete and 
+    prepares a command to send the configuration data back to the upload server.
+
+    Args:
+        session_id (str): The unique identifier for the session.
+
+    Returns:
+        flask.Response: A JSON response containing the command to set the 
+        configuration, along with a 200 HTTP status code.
+    """
     update_item_session_collection(session_id, {"status": swan_session_steps["5"]})
     content = {"upload_server": UPLOAD_SERVER}
     command = {
@@ -150,7 +200,23 @@ def send_back_to_upload_server(session_id):
     add_item_message_collection({"session_id": session_id, "description": "Sent SET_CFG command", "content": command})
     return jsonify(command), 200
 
+
 def send_configuration_to_swan(configuration_elements, session_id, imei):
+    """
+    Send configuration data to a SWAN device.
+
+    Prepares and sends a 'set_cfg' command with the given configuration elements 
+    to the SWAN device identified by the IMEI. Updates session status and logs the action.
+
+    Args:
+        configuration_elements (dict): The configuration data to be sent.
+        session_id (str): The unique identifier for the session.
+        imei (str): The IMEI identifier for the SWAN device.
+
+    Returns:
+        flask.Response: A JSON response containing the command to set the 
+        configuration, along with a 200 HTTP status code.
+    """
     command = {
         "cmd": {
             "type": "set_cfg", 
@@ -160,7 +226,6 @@ def send_configuration_to_swan(configuration_elements, session_id, imei):
     }
     
     update_item_session_collection(session_id, {"status": swan_session_steps["3"]})
-    
     delete_item_command_to_swan_collection(imei)
     
     document_id = f"{session_id}_{int(time.time())}"
@@ -176,6 +241,37 @@ def index():
 
 @main_bp.route("/swan", methods=["GET", "POST"])
 def handle_request():
+    """
+    Handle GET and POST requests for the SWAN endpoint.
+
+    This function manages requests made to the `/swan` route, which can be 
+    either GET or POST. The function performs different operations based on 
+    the request method:
+
+    - **GET**: Fetches all messages related to SWAN devices, logs the request,
+      and returns the data as a JSON response with a 200 OK status.
+    
+    - **POST**: Handles data sent from SWAN devices or other clients, either 
+      in JSON or CSV format. Depending on the content type and other headers,
+      the function either logs the data, initiates sessions for SWAN devices,
+      updates configurations, or sends necessary commands back to the devices.
+
+    Args:
+        request (flask.Request): The incoming request object, containing data, 
+        headers, and other relevant information.
+
+    Returns:
+        flask.Response: A JSON response with the appropriate status code based 
+        on the outcome of the request handling:
+        
+        - **200 OK**: For successful GET requests or successful command 
+          processing in POST requests.
+        - **201 Created**: For successful data addition in POST requests.
+        - **400 Bad Request**: If an unsupported content type is provided or 
+          there is an error in setting configuration.
+        - **Other status codes**: Based on specific conditions handled within 
+          the function.
+    """
     if request.method == "GET":
         # Fetch messages from SWAN and log the GET request
         data_list = fetch_swan_messages()
